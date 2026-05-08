@@ -1,0 +1,192 @@
+\documentclass[12pt,a4paper]{article}
+
+% --- Pacotes Básicos ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{pgfplots}
+\usepackage{pgfplotstable}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{setspace}
+
+% --- Configurações de Layout ---
+\geometry{margin=2.5cm}
+\pgfplotsset{compat=1.18}
+\onehalfspacing % Espaçamento de 1,5 para atingir o volume e clareza acadêmica
+
+% --- Metadados ---
+\title{Laboratório 03: Caracterizando a Atividade de Code Review no GitHub\\ \large Análise Quantitativa de Pull Requests em Repositórios Populares}
+\author{André Lazarini e João Pedro Guimarães \\ Engenharia de Software -- 6º Período \\ PUC Minas}
+\date{08 de maio de 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+    Este relatório detalha um experimento de Engenharia de Software Empírica focado na caracterização do processo de \textit{code review} na plataforma GitHub. Através da coleta automatizada de dados via API REST, foram analisados 6.063 \textit{Pull Requests} (PRs) provenientes de repositórios de alta relevância. O estudo busca correlacionar métricas de processo (tempo de análise, interações) e produto (tamanho do código, descrição) com o desfecho final (merge ou fechamento) e o esforço de revisão. Os resultados indicam que, embora a maioria dos PRs seja de pequeno porte, a variabilidade entre projetos é significativa, exigindo abordagens distintas de gestão de qualidade.
+\end{abstract}
+
+\newpage
+
+\section{Introdução}
+
+\subsection{Contextualização}
+No paradigma moderno de desenvolvimento de software, a prática de \textit{code review} (revisão de código) deixou de ser uma atividade secundária para se tornar o pilar central da garantia de qualidade em processos ágeis. Em linhas gerais, ela consiste na inspeção sistemática de incrementos de código por pares, antes que estes sejam integrados ao tronco principal (\textit{main branch}) do projeto. No ecossistema do GitHub, essa prática é operacionalizada através dos \textit{Pull Requests} (PRs), que funcionam como fóruns de discussão técnica e validação de requisitos.
+
+\subsection{Problema Foco do Experimento}
+Apesar da onipresença dos PRs, a eficiência do \textit{code review} é influenciada por uma miríade de fatores. O problema central deste experimento reside na identificação de quais variáveis --- sejam elas de esforço humano ou de características do código --- possuem maior impacto estatístico no sucesso da integração. Investigamos se PRs mais densos sofrem mais rejeições ou se a riqueza da documentação (descrição) acelera o processo de decisão dos mantenedores.
+
+\subsection{Questões-Pesquisa (Research Questions)}
+Para estruturar a análise, o estudo foi dividido em duas dimensões principais, resultando em oito questões de pesquisa:
+
+\paragraph{Dimensão A: Feedback Final das Revisões (Status do PR)}
+\begin{itemize}
+    \item \textbf{RQ 01:} Qual a relação entre o tamanho dos PRs (linhas e arquivos) e o feedback final (merge vs. closed)?
+    \item \textbf{RQ 02:} Qual a relação entre o tempo de análise e o status final do PR?
+    \item \textbf{RQ 03:} Como o tamanho da descrição do PR influencia a probabilidade de merge?
+    \item \textbf{RQ 04:} Qual a relação entre o volume de interações (comentários/participantes) e o desfecho do PR?
+\end{itemize}
+
+\paragraph{Dimensão B: Esforço de Revisão (Número de Revisões)}
+\begin{itemize}
+    \item \textbf{RQ 05:} Qual a relação entre o tamanho dos PRs e o número de revisões realizadas?
+    \item \textbf{RQ 06:} PRs que demoram mais para serem analisados recebem mais revisões?
+    \item \textbf{RQ 07:} Descrições mais longas reduzem ou aumentam a necessidade de múltiplas revisões?
+    \item \textbf{RQ 08:} Qual a correlação entre interações sociais e o número de revisões formais?
+\end{itemize}
+
+\subsection{Hipóteses}
+Trabalhamos com as hipóteses de que: (i) PRs maiores possuem maior taxa de fechamento sem merge devido à carga cognitiva de revisão; (ii) interações intensas indicam conflitos técnicos ou incertezas, postergando o merge; e (iii) descrições detalhadas facilitam o trabalho do revisor, reduzindo o tempo de análise em PRs de complexidade moderada.
+
+\subsection{Objetivo}
+O objetivo principal é caracterizar quantitativamente a atividade de \textit{code review} em repositórios populares do GitHub, identificando padrões de comportamento que possam ser replicados em projetos de engenharia de software para otimizar o ciclo de entrega (\textit{lead time}).
+
+\section{Metodologia}
+
+\subsection{Passo a Passo do Experimento}
+O experimento seguiu um fluxo rigoroso de quatro etapas:
+\begin{enumerate}
+    \item \textbf{Identificação:} Seleção dos 200 repositórios mais populares do GitHub (critério de \textit{stars}).
+    \item \textbf{Filtragem:} Aplicação do critério de maturidade (mínimo de 100 PRs fechados/merged).
+    \item \textbf{Extração:} Coleta via script Python (\texttt{collect\_github\_prs.py}) utilizando autenticação via Token de API para contornar \textit{rate limits}.
+    \item \textbf{Processamento:} Limpeza de dados (remoção de bots) e cálculo das correlações de Spearman.
+\end{enumerate}
+
+\subsection{Decisões de Design}
+Uma decisão crítica foi a \textbf{Regra da 1 Hora}: selecionamos apenas PRs cuja diferença entre criação e fechamento fosse superior a 60 minutos. Isso visa eliminar PRs processados exclusivamente por ferramentas de automação (CI/CD) ou bots, garantindo que o dataset reflita o comportamento humano de revisão.
+
+\subsection{Materiais Utilizados}
+\begin{itemize}
+    \item \textbf{Linguagens:} Python 3.10 para análise e PowerShell para scripts de coleta alternativos.
+    \item \textbf{Bibliotecas:} \texttt{pandas} para manipulação tabular, \texttt{scipy.stats} para cálculos de Spearman e \texttt{matplotlib/seaborn} para visualização.
+    \item \textbf{API:} GitHub REST API v3.
+\end{itemize}
+
+\subsection{Métodos Estatísticos}
+Utilizou-se o \textbf{Teste de Correlação de Spearman}. A escolha justifica-se pelo fato de as métricas de software (como linhas de código e tempo de análise) geralmente não seguirem uma distribuição normal (são enviesadas à direita), tornando testes paramétricos como o de Pearson inadequados.
+
+\subsection{Métricas e Unidades}
+\begin{itemize}
+    \item \textbf{Tamanho:} Unidade em contagem de arquivos e soma de linhas (adicionadas + removidas).
+    \item \textbf{Tempo:} Unidade em horas decimais.
+    \item \textbf{Interações:} Contagem absoluta de comentários e participantes únicos (Logins).
+    \item \textbf{Descrição:} Número total de caracteres (incluindo marcação Markdown).
+\end{itemize}
+
+\section{Visualização dos Resultados}
+
+\subsection{Estatística Descritiva do Dataset}
+Abaixo, apresentamos a síntese dos dados obtidos a partir dos 6.063 PRs analisados.
+
+\begin{table}[H]
+\centering
+\caption{Distribuição de Status Final e Médias}
+\label{tab:resumo-estatistico}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Métrica & Valor & Percentual \\ \midrule
+Total de PRs Válidos & 6.063 & 100\% \\
+Status: \texttt{MERGED} & 4.139 & 68,27\% \\
+Status: \texttt{CLOSED} & 1.924 & 31,73\% \\
+Média de Linhas Alteradas & 452 & -- \\
+Mediana de Tempo (Horas) & 109,72 & -- \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Análise Tabular das Questões de Pesquisa}
+A Tabela 2 apresenta as medianas comparativas entre os dois estados possíveis de um PR, fornecendo subsídios para as RQs 01 a 04.
+
+\begin{table}[H]
+\centering
+\caption{Medianas por Status (Feedback Final)}
+\begin{tabular}{lrr}
+\toprule
+Métrica (Mediana) & \texttt{MERGED} & \texttt{CLOSED} \\ \midrule
+Changed Lines Total & 12,0 & 45,0 \\
+Analysis Time (h) & 48,5 & 210,2 \\
+Description Length & 850 & 1.120 \\
+Comments Total & 2 & 5 \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Gráfico de Dispersão de Repositórios}
+O gráfico a seguir ilustra a variabilidade de PRs válidos encontrados nos projetos da amostra inicial.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar,
+    width=0.9\textwidth,
+    height=8cm,
+    bar width=15pt,
+    ylabel={Qtd. PRs Válidos},
+    symbolic x coords={BYO-X, Books, FreeCode, Roadmap, OpenClaw, PubAPI, Awesome},
+    xtick=data,
+    xticklabel style={rotate=45, anchor=east},
+    nodes near coords,
+    ymin=0
+]
+\addplot+[fill=blue!40, draw=black] coordinates {
+    (BYO-X, 58) (Books, 1511) (FreeCode, 1092) 
+    (Roadmap, 807) (OpenClaw, 591) (PubAPI, 1317) (Awesome, 687)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{Distribuição de PRs coletados por repositório (amostra representativa).}
+\end{figure}
+
+\section{Discussão dos Resultados}
+
+\subsection{Confronto com as Questões-Pesquisa}
+\paragraph{Análise da Dimensão A (RQs 01-04):} 
+Observamos que PRs que resultaram em \texttt{MERGED} possuem um tamanho mediano significativamente menor (12 linhas) comparado aos rejeitados (45 linhas). Isso sugere que a modularidade e atomicidade das contribuições são fatores determinantes para o aceite. O tempo de análise para PRs fundidos é quase quatro vezes menor, indicando que a demora excessiva no feedback pode estar correlacionada com a desistência ou rejeição do código.
+
+\paragraph{Análise da Dimensão B (RQs 05-08):}
+Os dados indicam uma correlação positiva moderada entre o número de participantes e o número de revisões. PRs com 3 ou mais revisões tendem a ter descrições mais longas, o que invalida a hipótese inicial de que descrições ricas reduzem o esforço; na verdade, descrições longas parecem acompanhar PRs inerentemente complexos que exigem mais ciclos de revisão.
+
+\subsection{Insights e Correlações de Spearman}
+Os testes estatísticos revelaram um P-Valor inferior a 0,05 para a maioria das métricas, confirmando significância estatística. A correlação entre \textit{Comments Total} e \textit{Analysis Time} mostrou-se a mais forte (0,65), confirmando que a discussão intensa é o maior preditor de demora no processo de \textit{review}.
+
+\subsection{Comparações com a Literatura}
+Nossos achados corroboram estudos clássicos (como os de Mockus et al.) sobre o desenvolvimento de software \textit{Open Source}, onde a maioria das contribuições é pequena e apenas uma fração dos colaboradores realiza mudanças arquiteturais densas.
+
+\section{Conclusão}
+
+\subsection{Tomada de Decisão}
+Com base nos resultados, recomenda-se que desenvolvedores priorizem a submissão de PRs pequenos (menos de 20 linhas sempre que possível) para maximizar a chance de merge rápido. Gestores de projeto devem monitorar PRs com mais de 5 comentários, pois estes representam gargalos de análise.
+
+\subsection{Sugestões Futuras}
+Para experimentos subsequentes, sugere-se a inclusão de análise de sentimento nos comentários para distinguir entre discussões construtivas e conflitos que levam ao fechamento do PR.
+
+\subsection{Resultado Conclusivo}
+O experimento demonstrou que o sucesso do \textit{code review} no GitHub é menos dependente da documentação extensiva e mais dependente da concisão do código submetido. A agilidade na primeira revisão é crítica para manter o engajamento do contribuidor.
+
+\end{document}
