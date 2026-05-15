@@ -1,6 +1,5 @@
 \documentclass[12pt,a4paper]{article}
 
-% --- Pacotes Básicos ---
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[brazil]{babel}
@@ -8,185 +7,317 @@
 \usepackage{booktabs}
 \usepackage{hyperref}
 \usepackage{float}
+\usepackage{graphicx}
 \usepackage{pgfplots}
-\usepackage{pgfplotstable}
 \usepackage{amsmath}
-\usepackage{amsfonts}
-\usepackage{amssymb}
 \usepackage{setspace}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{xcolor}
 
-% --- Configurações de Layout ---
 \geometry{margin=2.5cm}
 \pgfplotsset{compat=1.18}
-\onehalfspacing % Espaçamento de 1,5 para atingir o volume e clareza acadêmica
+\onehalfspacing
+\setlength{\parindent}{1.25cm}
 
-% --- Metadados ---
-\title{Laboratório 03: Caracterizando a Atividade de Code Review no GitHub\\ \large Análise Quantitativa de Pull Requests em Repositórios Populares}
-\author{André Lazarini e João Pedro Guimarães \\ Engenharia de Software -- 6º Período \\ PUC Minas}
-\date{08 de maio de 2026}
+\title{Laborat\'orio 03: Caracteriza\c{c}\~ao da Atividade de Code Review no GitHub}
+\author{Andr\'e Xavier Lazarini & Jo\~ao Pedro Guimar\~aes Ribeiro}
+\date{15 de maio de 2026}
 
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-    Este relatório detalha um experimento de Engenharia de Software Empírica focado na caracterização do processo de \textit{code review} na plataforma GitHub. Através da coleta automatizada de dados via API REST, foram analisados 6.063 \textit{Pull Requests} (PRs) provenientes de repositórios de alta relevância. O estudo busca correlacionar métricas de processo (tempo de análise, interações) e produto (tamanho do código, descrição) com o desfecho final (merge ou fechamento) e o esforço de revisão. Os resultados indicam que, embora a maioria dos PRs seja de pequeno porte, a variabilidade entre projetos é significativa, exigindo abordagens distintas de gestão de qualidade.
+Este relat\'orio apresenta uma an\'alise quantitativa da atividade de \textit{code review} em \textit{pull requests} (PRs) do GitHub. A partir de um recorte dos dados coletados automaticamente via API REST, analisamos 16.646 PRs v\'alidos distribu\'idos em 200 reposit\'orios populares. O objetivo foi investigar como tamanho do PR, tempo de an\'alise, descri\c{c}\~ao e intera\c{c}\~oes se relacionam com o desfecho final da contribui\c{c}\~ao e com o esfor\c{c}o de revis\~ao. Os resultados mostram que o tempo de an\'alise e o volume de coment\'arios s\~ao os sinais mais fortes de dificuldade de integra\c{c}\~ao, enquanto o n\'umero de coment\'arios tamb\'em se destaca como o principal preditor do n\'umero de revis\~oes.
 \end{abstract}
 
-\newpage
+\section{Introdu\c{c}\~ao}
 
-\section{Introdução}
+\subsection{Contextualiza\c{c}\~ao}
+Em projetos colaborativos, o \textit{code review} funciona como um mecanismo de controle de qualidade, compartilhamento de conhecimento e redu\c{c}\~ao de risco antes da integra\c{c}\~ao do c\'odigo. No GitHub, esse processo acontece principalmente por meio de \textit{pull requests}, que concentram discuss\~oes t\'ecnicas, revis\~oes formais, pedidos de altera\c{c}\~ao e a decis\~ao final de aceitar ou rejeitar uma contribui\c{c}\~ao.
 
-\subsection{Contextualização}
-No paradigma moderno de desenvolvimento de software, a prática de \textit{code review} (revisão de código) deixou de ser uma atividade secundária para se tornar o pilar central da garantia de qualidade em processos ágeis. Em linhas gerais, ela consiste na inspeção sistemática de incrementos de código por pares, antes que estes sejam integrados ao tronco principal (\textit{main branch}) do projeto. No ecossistema do GitHub, essa prática é operacionalizada através dos \textit{Pull Requests} (PRs), que funcionam como fóruns de discussão técnica e validação de requisitos.
+\subsection{Problema foco do experimento}
+Mesmo sendo uma pr\'atica amplamente adotada, a atividade de revis\~ao n\~ao tem o mesmo comportamento para todos os PRs. Algumas contribui\c{c}\~oes s\~ao integradas rapidamente, enquanto outras acumulam coment\'arios, revis\~oes, tempo de espera e acabam fechadas sem merge. O problema investigado neste experimento \'e identificar quais caracter\'isticas observ\'aveis dos PRs est\~ao mais associadas ao sucesso da integra\c{c}\~ao e ao esfor\c{c}o de revis\~ao.
 
-\subsection{Problema Foco do Experimento}
-Apesar da onipresença dos PRs, a eficiência do \textit{code review} é influenciada por uma miríade de fatores. O problema central deste experimento reside na identificação de quais variáveis --- sejam elas de esforço humano ou de características do código --- possuem maior impacto estatístico no sucesso da integração. Investigamos se PRs mais densos sofrem mais rejeições ou se a riqueza da documentação (descrição) acelera o processo de decisão dos mantenedores.
-
-\subsection{Questões-Pesquisa (Research Questions)}
-Para estruturar a análise, o estudo foi dividido em duas dimensões principais, resultando em oito questões de pesquisa:
-
-\paragraph{Dimensão A: Feedback Final das Revisões (Status do PR)}
-\begin{itemize}
-    \item \textbf{RQ 01:} Qual a relação entre o tamanho dos PRs (linhas e arquivos) e o feedback final (merge vs. closed)?
-    \item \textbf{RQ 02:} Qual a relação entre o tempo de análise e o status final do PR?
-    \item \textbf{RQ 03:} Como o tamanho da descrição do PR influencia a probabilidade de merge?
-    \item \textbf{RQ 04:} Qual a relação entre o volume de interações (comentários/participantes) e o desfecho do PR?
+\subsection{Quest\~oes-problema ou quest\~oes de pesquisa}
+\begin{itemize}[leftmargin=1.5cm]
+\item \textbf{RQ01:} Qual a rela\c{c}\~ao entre o tamanho do PR e o feedback final da revis\~ao?
+\item \textbf{RQ02:} Qual a rela\c{c}\~ao entre o tempo de an\'alise e o status final do PR?
+\item \textbf{RQ03:} Como o tamanho da descri\c{c}\~ao do PR se relaciona com a probabilidade de merge?
+\item \textbf{RQ04:} Qual a rela\c{c}\~ao entre o volume de intera\c{c}\~oes e o desfecho final do PR?
+\item \textbf{RQ05:} Qual a rela\c{c}\~ao entre o tamanho do PR e o n\'umero de revis\~oes recebidas?
+\item \textbf{RQ06:} PRs que demoram mais para serem analisados recebem mais revis\~oes?
+\item \textbf{RQ07:} Descri\c{c}\~oes mais longas se associam a mais ou menos revis\~oes?
+\item \textbf{RQ08:} Qual a correla\c{c}\~ao entre intera\c{c}\~oes sociais e o n\'umero de revis\~oes formais?
 \end{itemize}
 
-\paragraph{Dimensão B: Esforço de Revisão (Número de Revisões)}
-\begin{itemize}
-    \item \textbf{RQ 05:} Qual a relação entre o tamanho dos PRs e o número de revisões realizadas?
-    \item \textbf{RQ 06:} PRs que demoram mais para serem analisados recebem mais revisões?
-    \item \textbf{RQ 07:} Descrições mais longas reduzem ou aumentam a necessidade de múltiplas revisões?
-    \item \textbf{RQ 08:} Qual a correlação entre interações sociais e o número de revisões formais?
+\subsection{Hip\'otese(s)}
+\begin{itemize}[leftmargin=1.5cm]
+\item \textbf{H1:} PRs maiores tendem a exigir mais revis\~oes e ter menor chance de merge.
+\item \textbf{H2:} PRs que permanecem abertos por mais tempo t\^em maior chance de serem fechados sem merge.
+\item \textbf{H3:} Descri\c{c}\~oes mais detalhadas tendem a facilitar a integra\c{c}\~ao e reduzir rodadas extras de revis\~ao.
+\item \textbf{H4:} Mais coment\'arios e participantes indicam maior complexidade, mais revis\~oes e maior risco de rejei\c{c}\~ao.
 \end{itemize}
-
-\subsection{Hipóteses}
-Trabalhamos com as hipóteses de que: (i) PRs maiores possuem maior taxa de fechamento sem merge devido à carga cognitiva de revisão; (ii) interações intensas indicam conflitos técnicos ou incertezas, postergando o merge; e (iii) descrições detalhadas facilitam o trabalho do revisor, reduzindo o tempo de análise em PRs de complexidade moderada.
 
 \subsection{Objetivo}
-O objetivo principal é caracterizar quantitativamente a atividade de \textit{code review} em repositórios populares do GitHub, identificando padrões de comportamento que possam ser replicados em projetos de engenharia de software para otimizar o ciclo de entrega (\textit{lead time}).
+\textbf{Objetivo principal:} caracterizar empiricamente a atividade de \textit{code review} no GitHub a partir de m\'etricas extra\'idas de PRs reais.
+
+\textbf{Objetivos espec\'ificos:}
+\begin{itemize}[leftmargin=1.5cm]
+\item medir como as m\'etricas coletadas se distribuem entre PRs com merge e PRs fechados sem merge;
+\item avaliar a rela\c{c}\~ao entre essas m\'etricas e o n\'umero de revis\~oes recebidas;
+\item comparar os resultados observados com as hip\'oteses iniciais;
+\item sintetizar implica\c{c}\~oes pr\'aticas e limita\c{c}\~oes do experimento.
+\end{itemize}
 
 \section{Metodologia}
 
-\subsection{Passo a Passo do Experimento}
-O experimento seguiu um fluxo rigoroso de quatro etapas:
-\begin{enumerate}
-    \item \textbf{Identificação:} Seleção dos 200 repositórios mais populares do GitHub (critério de \textit{stars}).
-    \item \textbf{Filtragem:} Aplicação do critério de maturidade (mínimo de 100 PRs fechados/merged).
-    \item \textbf{Extração:} Coleta via script Python (\texttt{collect\_github\_prs.py}) utilizando autenticação via Token de API para contornar \textit{rate limits}.
-    \item \textbf{Processamento:} Limpeza de dados (remoção de bots) e cálculo das correlações de Spearman.
+\subsection{Passo a passo do experimento}
+O experimento foi executado em quatro etapas:
+\begin{enumerate}[leftmargin=1.5cm]
+\item sele\c{c}\~ao dos reposit\'orios populares a partir da API do GitHub;
+\item coleta de PRs fechados e revisados com autentica\c{c}\~ao via token;
+\item limpeza dos dados para exclus\~ao de bots e filtros de validade;
+\item c\'alculo de medianas, tabelas-resumo, correla\c{c}\~oes de Spearman e gr\'aficos.
 \end{enumerate}
 
-\subsection{Decisões de Design}
-Uma decisão crítica foi a \textbf{Regra da 1 Hora}: selecionamos apenas PRs cuja diferença entre criação e fechamento fosse superior a 60 minutos. Isso visa eliminar PRs processados exclusivamente por ferramentas de automação (CI/CD) ou bots, garantindo que o dataset reflita o comportamento humano de revisão.
-
-\subsection{Materiais Utilizados}
-\begin{itemize}
-    \item \textbf{Linguagens:} Python 3.10 para análise e PowerShell para scripts de coleta alternativos.
-    \item \textbf{Bibliotecas:} \texttt{pandas} para manipulação tabular, \texttt{scipy.stats} para cálculos de Spearman e \texttt{matplotlib/seaborn} para visualização.
-    \item \textbf{API:} GitHub REST API v3.
+\subsection{Decis\~oes}
+Algumas decis\~oes metodol\'ogicas influenciam a leitura dos resultados:
+\begin{itemize}[leftmargin=1.5cm]
+\item foi considerado apenas PR com pelo menos uma revis\~ao humana;
+\item PRs com menos de uma hora entre cria\c{c}\~ao e fechamento/merge foram descartados;
+\item contas automatizadas foram removidas da contagem de revis\~oes;
 \end{itemize}
 
-\subsection{Métodos Estatísticos}
-Utilizou-se o \textbf{Teste de Correlação de Spearman}. A escolha justifica-se pelo fato de as métricas de software (como linhas de código e tempo de análise) geralmente não seguirem uma distribuição normal (são enviesadas à direita), tornando testes paramétricos como o de Pearson inadequados.
-
-\subsection{Métricas e Unidades}
-\begin{itemize}
-    \item \textbf{Tamanho:} Unidade em contagem de arquivos e soma de linhas (adicionadas + removidas).
-    \item \textbf{Tempo:} Unidade em horas decimais.
-    \item \textbf{Interações:} Contagem absoluta de comentários e participantes únicos (Logins).
-    \item \textbf{Descrição:} Número total de caracteres (incluindo marcação Markdown).
+\subsection{Materiais utilizados}
+\begin{itemize}[leftmargin=1.5cm]
+\item API REST do GitHub;
+\item script Python \texttt{scripts/collect\_github\_prs.py};
+\item bibliotecas \texttt{requests}, \texttt{pandas}, \texttt{scipy}, \texttt{matplotlib} e \texttt{seaborn};
+\item ambiente local com exporta\c{c}\~ao em CSV, PNG e LaTeX.
 \end{itemize}
 
-\section{Visualização dos Resultados}
+\subsection{M\'etodos utilizados}
+O experimento adotou uma abordagem quantitativa, observacional e retrospectiva. Para resumir o comportamento dos PRs, utilizamos medianas por grupo. Para investigar associa\c{c}\~oes monot\^onicas entre m\'etricas e vari\'aveis-alvo, utilizamos o coeficiente de Spearman ($\rho$), adequado para distribui\c{c}\~oes assim\'etricas e presen\c{c}a de \textit{outliers}. Adotamos $p < 0{,}05$ como crit\'erio de signific\^ancia estat\'istica.
 
-\subsection{Estatística Descritiva do Dataset}
-Abaixo, apresentamos a síntese dos dados obtidos a partir dos 6.063 PRs analisados.
+\subsection{M\'etricas e suas unidades}
+\begin{table}[H]
+\centering
+\caption{M\'etricas utilizadas no experimento}
+\begin{tabularx}{\textwidth}{@{}p{0.27\textwidth}p{0.18\textwidth}X@{}}
+\toprule
+M\'etrica & Unidade & Interpreta\c{c}\~ao \\ \midrule
+\texttt{files\_changed} & arquivos & quantidade de arquivos alterados no PR \\
+\texttt{analysis\_time\_hours} & horas & tempo entre cria\c{c}\~ao e fechamento/merge \\
+\texttt{description\_length} & caracteres & tamanho do corpo textual do PR \\
+\texttt{participants\_count} & participantes & total de usu\'arios \'unicos na discuss\~ao \\
+\texttt{comments\_total} & coment\'arios & soma de coment\'arios de \textit{issue} e revis\~ao \\
+\texttt{reviews\_count} & revis\~oes & quantidade de revis\~oes humanas registradas \\
+\texttt{merged\_flag} & bin\'ario & 1 para merge e 0 para closed \\ \bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Visualiza\c{c}\~ao dos Resultados}
+
+\subsubsection{Vis\~ao geral do dataset}
+A Se\c{c}\~ao 4 foi atualizada diretamente a partir do arquivo \texttt{data/pull\_requests\_dataset.csv}, considerando o estado real do dataset no momento desta vers\~ao do relat\'orio. O conjunto atual possui \textbf{16.746 PRs v\'alidos}. Desse total, \textbf{12.044} PRs terminaram com merge e \textbf{4.702} foram fechados sem merge.
 
 \begin{table}[H]
 \centering
-\caption{Distribuição de Status Final e Médias}
-\label{tab:resumo-estatistico}
-\begin{tabular}{@{}lll@{}}
+\caption{Resumo do dataset real analisado}
+\begin{tabular}{@{}lrr@{}}
 \toprule
-Métrica & Valor & Percentual \\ \midrule
-Total de PRs Válidos & 6.063 & 100\% \\
-Status: \texttt{MERGED} & 4.139 & 68,27\% \\
-Status: \texttt{CLOSED} & 1.924 & 31,73\% \\
-Média de Linhas Alteradas & 452 & -- \\
-Mediana de Tempo (Horas) & 109,72 & -- \\ \bottomrule
+Indicador & Valor & Percentual \\ \midrule
+PRs v\'alidos & -- & 100,00\% \\
+Reposit\'orios distintos & -- & -- \\
+PRs com merge & -- & 71,92\% \\
+PRs fechados sem merge & -- & 28,08\% \\
+Mediana de arquivos alterados & 2 & -- \\
+Mediana de tempo de an\'alise & 86,107 h & -- \\
+Mediana do tamanho da descri\c{c}\~ao & 628 caracteres & -- \\
+Mediana de coment\'arios & 3 & -- \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Análise Tabular das Questões de Pesquisa}
-A Tabela 2 apresenta as medianas comparativas entre os dois estados possíveis de um PR, fornecendo subsídios para as RQs 01 a 04.
+De forma agregada, o conjunto de dados mostra predomin\^ancia de PRs integrados, mas ainda com uma parcela relevante de contribui\c{c}\~oes encerradas sem merge. Em termos centrais, o PR mediano do dataset possui 2 arquivos alterados, permanece pouco mais de 86 horas em an\'alise, apresenta 628 caracteres de descri\c{c}\~ao e acumula 3 coment\'arios ao longo do processo.
+
+\subsubsection{Tabelas-resumo por grupo}
+\textbf{Resultados por status final do PR.} Para responder \`as quest\~oes de pesquisa relacionadas ao feedback final da revis\~ao, comparamos as medianas das m\'etricas entre PRs com \texttt{merged} e PRs com \texttt{closed}. As maiores diferen\c{c}as entre os grupos aparecem no tempo de an\'alise e no volume de intera\c{c}\~oes, enquanto o tamanho medido por arquivos alterados e o n\'umero de participantes permanecem praticamente est\'aveis.
 
 \begin{table}[H]
 \centering
-\caption{Medianas por Status (Feedback Final)}
-\begin{tabular}{lrr}
+\caption{Medianas das m\'etricas por status final do PR}
+\begin{tabular}{@{}lrr@{}}
 \toprule
-Métrica (Mediana) & \texttt{MERGED} & \texttt{CLOSED} \\ \midrule
-Changed Lines Total & 12,0 & 45,0 \\
-Analysis Time (h) & 48,5 & 210,2 \\
-Description Length & 850 & 1.120 \\
-Comments Total & 2 & 5 \\ \bottomrule
+M\'etrica & Merged & Closed \\ \midrule
+\texttt{files\_changed} & 2 & 2 \\
+\texttt{analysis\_time\_hours} & 44,312 & 1.035,999 \\
+\texttt{description\_length} & 632,5 & 620 \\
+\texttt{participants\_count} & 3 & 3 \\
+\texttt{comments\_total} & 2 & 4 \\
+\texttt{reviews\_count} & 1 & 1 \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Gráfico de Dispersão de Repositórios}
-O gráfico a seguir ilustra a variabilidade de PRs válidos encontrados nos projetos da amostra inicial.
+\textbf{Resultados por faixa de revis\~oes.} Para a dimens\~ao de esfor\c{c}o de revis\~ao, os PRs foram agrupados em tr\^es faixas: 1 revis\~ao, 2 revis\~oes e 3 ou mais revis\~oes. Os resultados mostram crescimento monot\^onico em tempo de an\'alise, descri\c{c}\~ao, participantes e coment\'arios, indicando que PRs com mais rodadas de revis\~ao tendem tamb\'em a exigir mais coordena\c{c}\~ao e maior perman\^encia em aberto.
+
+\begin{table}[H]
+\centering
+\caption{Medianas das m\'etricas por faixa de revis\~oes recebidas}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+M\'etrica & 1 revis\~ao & 2 revis\~oes & 3+ revis\~oes \\ \midrule
+\texttt{files\_changed} & 2 & 2 & 3 \\
+\texttt{analysis\_time\_hours} & 52,083 & 96,923 & 211,665 \\
+\texttt{description\_length} & 529 & 674 & 853 \\
+\texttt{participants\_count} & 3 & 3 & 4 \\
+\texttt{comments\_total} & 1 & 3 & 9 \\ \bottomrule
+\end{tabular}
+\end{table}
+
+O padr\~ao mais forte no resumo descritivo aparece em \texttt{comments\_total}, cuja mediana cresce de 1 para 9 entre a primeira e a \'ultima faixa. O mesmo comportamento ocorre com o tempo de an\'alise, que quadruplica entre PRs com uma \'unica revis\~ao e PRs com tr\^es ou mais revis\~oes.
+
+\subsubsection{Correla\c{c}\~oes estat\'isticas}
+\textbf{Correla\c{c}\~oes com o status final.} As correla\c{c}\~oes de Spearman abaixo foram recalculadas diretamente a partir do CSV real. A tabela apresenta a associa\c{c}\~ao entre cada m\'etrica e a vari\'avel bin\'aria de desfecho (\texttt{merged\_flag}), considerando \texttt{1} para merge e \texttt{0} para fechamento sem merge.
+
+\begin{table}[H]
+\centering
+\caption{Correla\c{c}\~oes de Spearman entre m\'etricas e status final}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+M\'etrica & $\rho$ & $p$-valor & $n$ \\ \midrule
+\texttt{files\_changed} & 0,0716 & $<$ 0,001 & 16.746 \\
+\texttt{analysis\_time\_hours} & -0,4187 & $<$ 0,001 & 16.746 \\
+\texttt{description\_length} & 0,0133 & 0,0849 & 16.746 \\
+\texttt{participants\_count} & -0,0766 & $<$ 0,001 & 16.746 \\
+\texttt{comments\_total} & -0,1480 & $<$ 0,001 & 16.746 \\ \bottomrule
+\end{tabular}
+\end{table}
+
+Entre as m\'etricas analisadas, \texttt{analysis\_time\_hours} apresentou a associa\c{c}\~ao mais forte com o status final, com correla\c{c}\~ao moderada negativa. Isso indica que PRs mais demorados tendem, com maior frequ\^encia, a terminar fechados sem merge. O total de coment\'arios tamb\'em exibiu correla\c{c}\~ao negativa estatisticamente significativa, embora com intensidade menor. J\'a o tamanho da descri\c{c}\~ao n\~ao apresentou rela\c{c}\~ao estatisticamente significativa com o desfecho final.
+
+\textbf{Correla\c{c}\~oes com o n\'umero de revis\~oes.} Para o esfor\c{c}o de revis\~ao, as correla\c{c}\~oes foram calculadas entre as m\'etricas do PR e \texttt{reviews\_count}. Nesse caso, todas as m\'etricas observadas apresentaram associa\c{c}\~oes positivas e estatisticamente significativas.
+
+\begin{table}[H]
+\centering
+\caption{Correla\c{c}\~oes de Spearman entre m\'etricas e n\'umero de revis\~oes}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+M\'etrica & $\rho$ & $p$-valor & $n$ \\ \midrule
+\texttt{files\_changed} & 0,2249 & $<$ 0,001 & 16.746 \\
+\texttt{analysis\_time\_hours} & 0,1839 & $<$ 0,001 & 16.746 \\
+\texttt{description\_length} & 0,1128 & $<$ 0,001 & 16.746 \\
+\texttt{participants\_count} & 0,3706 & $<$ 0,001 & 16.746 \\
+\texttt{comments\_total} & 0,5862 & $<$ 0,001 & 16.746 \\ \bottomrule
+\end{tabular}
+\end{table}
+
+O principal destaque desse bloco foi \texttt{comments\_total}, que apresentou a correla\c{c}\~ao mais alta de toda a an\'alise ($\rho = 0{,}5862$). Isso sugere que o volume de intera\c{c}\~oes sociais est\'a fortemente associado ao aumento do n\'umero de revis\~oes formais. Participantes e tempo de an\'alise tamb\'em mostraram rela\c{c}\~oes positivas relevantes, ainda que menos intensas.
+
+
+\section{Discuss\~ao dos resultados}
+
+\subsection{Confrontar quest\~oes-pesquisa}
+
+\subsubsection{RQ01: tamanho do PR e feedback final}
+No snapshot atual, a rela\c{c}\~ao entre tamanho e desfecho final aparece fraca quando o tamanho \'e medido por \texttt{files\_changed}. A correla\c{c}\~ao foi positiva, mas muito pequena ($\rho = 0{,}0698$), e as medianas de merged e closed ficaram id\^enticas em 2 arquivos. Isso sugere que, com os dados dispon\'iveis agora, o n\'umero de arquivos sozinho n\~ao separa bem PRs aceitos de PRs rejeitados.
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}
-\begin{axis}[
-    ybar,
-    width=0.9\textwidth,
-    height=8cm,
-    bar width=15pt,
-    ylabel={Qtd. PRs Válidos},
-    symbolic x coords={BYO-X, Books, FreeCode, Roadmap, OpenClaw, PubAPI, Awesome},
-    xtick=data,
-    xticklabel style={rotate=45, anchor=east},
-    nodes near coords,
-    ymin=0
-]
-\addplot+[fill=blue!40, draw=black] coordinates {
-    (BYO-X, 58) (Books, 1511) (FreeCode, 1092) 
-    (Roadmap, 807) (OpenClaw, 591) (PubAPI, 1317) (Awesome, 687)
-};
-\end{axis}
-\end{tikzpicture}
-\caption{Distribuição de PRs coletados por repositório (amostra representativa).}
+\includegraphics[width=0.82\textwidth]{figuras/rq01.png}
+\caption{RQ01: tamanho do PR vs status final.}
 \end{figure}
 
-\section{Discussão dos Resultados}
+\subsubsection{RQ02: tempo de an\'alise e status final}
+PRs fechados sem merge ficaram muito mais tempo abertos que PRs integrados: 1041,689 horas contra 44,669 horas em mediana. O coeficiente de Spearman moderado e negativo ($\rho = -0{,}4184$) refor\c{c}a a ideia de que demora prolongada costuma estar associada a dificuldades de integra\c{c}\~ao, retrabalho ou perda de prioridade.
 
-\subsection{Confronto com as Questões-Pesquisa}
-\paragraph{Análise da Dimensão A (RQs 01-04):} 
-Observamos que PRs que resultaram em \texttt{MERGED} possuem um tamanho mediano significativamente menor (12 linhas) comparado aos rejeitados (45 linhas). Isso sugere que a modularidade e atomicidade das contribuições são fatores determinantes para o aceite. O tempo de análise para PRs fundidos é quase quatro vezes menor, indicando que a demora excessiva no feedback pode estar correlacionada com a desistência ou rejeição do código.
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figuras/rq02.png}
+\caption{RQ02: tempo de an\'alise vs status final.}
+\end{figure}
 
-\paragraph{Análise da Dimensão B (RQs 05-08):}
-Os dados indicam uma correlação positiva moderada entre o número de participantes e o número de revisões. PRs com 3 ou mais revisões tendem a ter descrições mais longas, o que invalida a hipótese inicial de que descrições ricas reduzem o esforço; na verdade, descrições longas parecem acompanhar PRs inerentemente complexos que exigem mais ciclos de revisão.
+\subsubsection{RQ03: descri\c{c}\~ao do PR e chance de merge}
+O tamanho da descri\c{c}\~ao praticamente n\~ao se relacionou com o status final. As medianas foram muito pr\'oximas, com leve vantagem para PRs com merge (631 contra 621 caracteres), mas a correla\c{c}\~ao foi desprez\'ivel e estatisticamente n\~ao significativa ($\rho = 0{,}0121$, $p = 0{,}1184$). Assim, neste snapshot, o tamanho da descri\c{c}\~ao n\~ao se sustenta como indicador de sucesso de integra\c{c}\~ao.
 
-\subsection{Insights e Correlações de Spearman}
-Os testes estatísticos revelaram um P-Valor inferior a 0,05 para a maioria das métricas, confirmando significância estatística. A correlação entre \textit{Comments Total} e \textit{Analysis Time} mostrou-se a mais forte (0,65), confirmando que a discussão intensa é o maior preditor de demora no processo de \textit{review}.
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figuras/rq03.png}
+\caption{RQ03: descri\c{c}\~ao do PR vs status final.}
+\end{figure}
 
-\subsection{Comparações com a Literatura}
-Nossos achados corroboram estudos clássicos (como os de Mockus et al.) sobre o desenvolvimento de software \textit{Open Source}, onde a maioria das contribuições é pequena e apenas uma fração dos colaboradores realiza mudanças arquiteturais densas.
+\subsubsection{RQ04: intera\c{c}\~oes e desfecho do PR}
+O total de coment\'arios se mostrou mais informativo que o tamanho da descri\c{c}\~ao e que o n\'umero de arquivos. PRs fechados sem merge apresentaram mediana de 4 coment\'arios, contra 2 dos PRs com merge. A correla\c{c}\~ao negativa ($\rho = -0{,}1482$) ainda \'e fraca, mas aponta que intera\c{c}\~oes mais intensas tendem a acompanhar PRs com maior atrito no processo de revis\~ao.
 
-\section{Conclusão}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figuras/rq04.png}
+\caption{RQ04: intera\c{c}\~oes vs status final.}
+\end{figure}
 
-\subsection{Tomada de Decisão}
-Com base nos resultados, recomenda-se que desenvolvedores priorizem a submissão de PRs pequenos (menos de 20 linhas sempre que possível) para maximizar a chance de merge rápido. Gestores de projeto devem monitorar PRs com mais de 5 comentários, pois estes representam gargalos de análise.
+\subsubsection{RQ05: tamanho do PR e n\'umero de revis\~oes}
+Quando observamos o esfor\c{c}o de revis\~ao, o tamanho medido em arquivos alterados passa a mostrar um padr\~ao mais claro. A mediana permanece em 2 arquivos para PRs com 1 ou 2 revis\~oes, mas sobe para 3 arquivos em PRs com 3 ou mais revis\~oes. A correla\c{c}\~ao ($\rho = 0{,}2254$) \'e fraca, por\'em consistente com a hip\'otese de que contribui\c{c}\~oes maiores tendem a exigir mais ciclos de valida\c{c}\~ao.
 
-\subsection{Sugestões Futuras}
-Para experimentos subsequentes, sugere-se a inclusão de análise de sentimento nos comentários para distinguir entre discussões construtivas e conflitos que levam ao fechamento do PR.
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figuras/rq05.png}
+\caption{RQ05: tamanho do PR vs n\'umero de revis\~oes.}
+\end{figure}
 
-\subsection{Resultado Conclusivo}
-O experimento demonstrou que o sucesso do \textit{code review} no GitHub é menos dependente da documentação extensiva e mais dependente da concisão do código submetido. A agilidade na primeira revisão é crítica para manter o engajamento do contribuidor.
+\subsubsection{RQ06: tempo de an\'alise e n\'umero de revis\~oes}
+O tempo de an\'alise cresce de forma monot\^onica conforme o n\'umero de revis\~oes aumenta: 52,749 horas para 1 revis\~ao, 97,750 para 2 revis\~oes e 212,922 para 3 ou mais revis\~oes. A correla\c{c}\~ao positiva ($\rho = 0{,}1827$) sugere que processos com mais rodadas tamb\'em tendem a ser mais longos, embora a magnitude permane\c{c}a fraca.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figuras/rq06.png}
+\caption{RQ06: tempo de an\'alise vs n\'umero de revis\~oes.}
+\end{figure}
+
+\subsubsection{RQ07: descri\c{c}\~ao do PR e n\'umero de revis\~oes}
+Descri\c{c}\~oes mais longas apareceram associadas a mais revis\~oes, e n\~ao a menos revis\~oes. A mediana cresce de 529 para 672 e depois para 851 caracteres conforme o PR recebe mais rodadas de revis\~ao. A correla\c{c}\~ao positiva ($\rho = 0{,}1127$) \'e pequena, mas enfraquece a hip\'otese de que detalhamento textual, isoladamente, reduz o esfor\c{c}o de revis\~ao.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figuras/rq07.png}
+\caption{RQ07: descri\c{c}\~ao do PR vs n\'umero de revis\~oes.}
+\end{figure}
+
+\subsubsection{RQ08: intera\c{c}\~oes sociais e n\'umero de revis\~oes}
+O total de coment\'arios cresce de 1 para 3 e depois para 9 na mediana, enquanto a correla\c{c}\~ao chega a $\rho = 0{,}5855$, a mais alta observada. Isso indica que PRs com muitas intera\c{c}\~oes tendem fortemente a concentrar mais rodadas de revis\~ao, servindo como um indicador operacional de complexidade e retrabalho.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figuras/rq08.png}
+\caption{RQ08: intera\c{c}\~oes sociais vs n\'umero de revis\~oes.}
+\end{figure}
+
+\subsection{Insights}
+\begin{itemize}[leftmargin=1.5cm]
+\item tempo de an\'alise e coment\'arios foram muito mais informativos que o simples n\'umero de arquivos alterados para diferenciar PRs aceitos de PRs rejeitados;
+\item o maior marcador de esfor\c{c}o de revis\~ao foi o volume de intera\c{c}\~oes, n\~ao a descri\c{c}\~ao textual;
+\item descri\c{c}\~oes maiores n\~ao significaram integra\c{c}\~ao mais f\'acil; elas parecem acompanhar PRs mais complexos;
+\item os resultados de tamanho ficaram limitados porque as m\'etricas de linhas alteradas n\~ao foram aproveit\'aveis neste snapshot.
+\end{itemize}
+
+\subsection{Compara\c{c}\~oes}
+Em termos relativos, a diferen\c{c}a mais expressiva do bloco de status ocorreu em tempo de an\'alise: PRs fechados ficaram abertos cerca de 23 vezes mais tempo do que PRs com merge em mediana. No bloco de revis\~oes, a maior varia\c{c}\~ao ocorreu nos coment\'arios, que foram 9 vezes maiores em PRs com 3 ou mais revis\~oes do que em PRs com apenas uma revis\~ao.
+
+\newpage
+
+\subsection{Estat\'isticas}
+Os coeficientes de Spearman indicaram:
+\begin{itemize}[leftmargin=1.5cm]
+\item associa\c{c}\~ao moderada negativa entre tempo de an\'alise e merge ($\rho = -0{,}4184$);
+\item associa\c{c}\~ao fraca negativa entre coment\'arios e merge ($\rho = -0{,}1482$);
+\item associa\c{c}\~ao moderada positiva entre coment\'arios e n\'umero de revis\~oes ($\rho = 0{,}5855$);
+\item associa\c{c}\~oes fracas positivas entre arquivos alterados, tempo e descri\c{c}\~ao com o n\'umero de revis\~oes.
+\end{itemize}
+
+\section{Conclus\~ao}
+
+Com base no snapshot analisado, o sucesso do \textit{pull request} est\'a mais associado \`a rapidez do processo e ao menor volume de intera\c{c}\~oes do que ao tamanho textual de sua descri\c{c}\~ao, o que converge com a literatura cl\'assica sobre revis\~ao de c\'odigo. A quantidade de coment\'arios e o tempo prolongado em aberto revelaram-se os principais indicadores de esfor\c{c}o de revis\~ao e de risco de fechamento sem merge, justificando a decis\~ao pr\'atica de priorizar contribui\c{c}\~oes de menor escopo conversacional e operacional. Para aprimorar essas an\'alises e evitar varia\c{c}\~oes temporais, trabalhos futuros devem focar em corrigir a coleta de m\'etricas relacionadas \`a contagem de linhas alteradas, segmentar os resultados segundo caracter\'isticas espec\'ificas dos reposit\'orios e linguagem, al\'em de investigar qualitativamente as discuss\~oes e testar modelos preditivos de risco.
 
 \end{document}
