@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.csv_utils import csv_has_header
 from src.lab03.github_api import GitHubApiError, GitHubClient
 
 
@@ -19,6 +20,7 @@ MIN_REVIEW_HOURS = 1.0
 DEFAULT_TOP_REPOSITORIES = 200
 DEFAULT_MIN_PRS = 100
 DEFAULT_MAX_PRS_PER_REPO = 0
+EXCLUDED_REPOSITORIES: set[str] = set()
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,7 +44,7 @@ def parse_args() -> argparse.Namespace:
         "--max-prs-per-repo",
         type=int,
         default=DEFAULT_MAX_PRS_PER_REPO,
-        help="Quantidade maxima de PRs coletados por repositorio. Use 0 para coletar todos.",
+        help="Quantidade maxima de PRs validos coletados por repositorio. Use 0 para coletar todos.",
     )
     parser.add_argument(
         "--language",
@@ -82,13 +84,15 @@ def get_popular_repositories(client: GitHubClient, top_n: int, language: str | N
         if not items:
             break
 
-        repositories.extend(items)
+        repositories.extend(
+            item for item in items if item.get("full_name") not in EXCLUDED_REPOSITORIES
+        )
         page += 1
 
     return repositories[:top_n]
 
 
-def list_pull_requests(client: GitHubClient, owner: str, repo: str, limit: int) -> list[dict[str, Any]]:
+def list_pull_requests(client: GitHubClient, owner: str, repo: str) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
 
     for pr in client.paginated_get(
@@ -96,8 +100,6 @@ def list_pull_requests(client: GitHubClient, owner: str, repo: str, limit: int) 
         params={"state": "closed", "sort": "updated", "direction": "desc"},
     ):
         results.append(pr)
-        if limit > 0 and len(results) >= limit:
-            break
 
     return results
 
@@ -203,8 +205,41 @@ def repository_has_enough_prs(client: GitHubClient, owner: str, repo: str, min_p
     return total_count >= min_prs
 
 
+REPO_FIELDNAMES = ["full_name", "stars", "language", "html_url"]
+PR_FIELDNAMES = [
+    "repository_full_name", "repository_stars", "repository_language",
+    "pull_number", "pull_state", "merged_flag", "created_at",
+    "closed_or_merged_at", "analysis_time_hours", "analysis_time_days",
+    "files_changed", "additions", "deletions", "changed_lines_total",
+    "description_length", "participants_count", "issue_comments_count",
+    "review_comments_count", "comments_total", "reviews_count",
+    "review_approvals", "review_change_requests", "review_comments_only",
+    "author_login", "url",
+]
+
+
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
+
+
+def open_csv_writer(path: Path, fieldnames: list[str]) -> tuple[Any, Any]:
+    already_exists = path.exists()
+    handle = path.open("a", newline="", encoding="utf-8")
+    writer = csv.DictWriter(handle, fieldnames=fieldnames)
+    if not already_exists or path.stat().st_size == 0:
+        writer.writeheader()
+    return handle, writer
+
+
+def iter_existing_rows(path: Path, fieldnames: list[str]) -> list[dict[str, Any]]:
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+
+    has_header = csv_has_header(path, fieldnames)
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        if has_header:
+            return list(csv.DictReader(handle))
+        return [dict(zip(fieldnames, row)) for row in csv.reader(handle) if row]
 
 
 def main() -> None:
@@ -218,49 +253,78 @@ def main() -> None:
     repositories_output = output_dir / "selected_repositories.csv"
     dataset_output = output_dir / "pull_requests_dataset.csv"
 
-    selected_repositories: list[dict[str, Any]] = []
-    dataset_rows: list[dict[str, Any]] = []
+    # Carrega repos já processados para permitir retomada
+    already_done: set[str] = set()
+    if repositories_output.exists():
+        for row in iter_existing_rows(repositories_output, REPO_FIELDNAMES):
+            full_name = row.get("full_name")
+            if full_name:
+                already_done.add(full_name)
+        print(f"Retomando coleta. Repos ja processados: {len(already_done)}")
 
-    for repository in repositories:
-        owner = repository["owner"]["login"]
-        repo = repository["name"]
+    total_repos = len(already_done)
+    total_prs = 0
+    if dataset_output.exists():
+        with dataset_output.open("r", encoding="utf-8") as f:
+            total_prs = sum(1 for _ in f) - 1  # desconta header
 
-        try:
-            if not repository_has_enough_prs(client, owner, repo, args.min_prs):
-                continue
+    repo_handle, repo_writer = open_csv_writer(repositories_output, REPO_FIELDNAMES)
+    pr_handle, pr_writer = open_csv_writer(dataset_output, PR_FIELDNAMES)
 
-            selected_repositories.append(
-                {
-                    "full_name": repository["full_name"],
-                    "stars": repository["stargazers_count"],
-                    "language": repository.get("language"),
-                    "html_url": repository.get("html_url"),
-                }
-            )
+    try:
+        for repository in repositories:
+            owner = repository["owner"]["login"]
+            repo = repository["name"]
 
-            pulls = list_pull_requests(client, owner, repo, args.max_prs_per_repo)
-            for pr in pulls:
-                reviews = fetch_reviews(client, owner, repo, pr["number"])
-                non_bot_reviews = [
-                    review for review in reviews if not is_bot((review.get("user") or {}).get("login"))
-                ]
-                if not non_bot_reviews:
+            try:
+                if repository["full_name"] in already_done:
+                    print(f"Pulando (ja processado): {repository['full_name']}")
                     continue
 
-                created_at = iso_to_datetime(pr.get("created_at"))
-                finished_at = iso_to_datetime(pr.get("merged_at") or pr.get("closed_at"))
-                if created_at is None or finished_at is None:
+                if repository["full_name"] in EXCLUDED_REPOSITORIES:
+                    print(f"Pulando (repositorio excluido): {repository['full_name']}")
                     continue
 
-                if (finished_at - created_at).total_seconds() < MIN_REVIEW_HOURS * 3600:
+                if not repository_has_enough_prs(client, owner, repo, args.min_prs):
                     continue
 
-                issue_comments = fetch_issue_comments(client, owner, repo, pr["number"])
-                review_comments = fetch_review_comments(client, owner, repo, pr["number"])
-                files_changed = count_files(client, owner, repo, pr["number"])
+                repo_writer.writerow(
+                    {
+                        "full_name": repository["full_name"],
+                        "stars": repository["stargazers_count"],
+                        "language": repository.get("language"),
+                        "html_url": repository.get("html_url"),
+                    }
+                )
+                repo_handle.flush()
+                total_repos += 1
 
-                dataset_rows.append(
-                    build_row(
+                repo_prs = 0
+                pulls = list_pull_requests(client, owner, repo)
+                for pr in pulls:
+                    if args.max_prs_per_repo > 0 and repo_prs >= args.max_prs_per_repo:
+                        break
+
+                    reviews = fetch_reviews(client, owner, repo, pr["number"])
+                    non_bot_reviews = [
+                        review for review in reviews if not is_bot((review.get("user") or {}).get("login"))
+                    ]
+                    if not non_bot_reviews:
+                        continue
+
+                    created_at = iso_to_datetime(pr.get("created_at"))
+                    finished_at = iso_to_datetime(pr.get("merged_at") or pr.get("closed_at"))
+                    if created_at is None or finished_at is None:
+                        continue
+
+                    if (finished_at - created_at).total_seconds() < MIN_REVIEW_HOURS * 3600:
+                        continue
+
+                    issue_comments = fetch_issue_comments(client, owner, repo, pr["number"])
+                    review_comments = fetch_review_comments(client, owner, repo, pr["number"])
+                    files_changed = count_files(client, owner, repo, pr["number"])
+
+                    row = build_row(
                         repository=repository,
                         pr=pr,
                         reviews=non_bot_reviews,
@@ -268,31 +332,26 @@ def main() -> None:
                         review_comments=review_comments,
                         files_changed=files_changed,
                     )
+                    pr_writer.writerow(row)
+                    pr_handle.flush()
+                    repo_prs += 1
+                    total_prs += 1
+
+                print(
+                    f"Repositorio processado: {repository['full_name']} | "
+                    f"PRs validos neste repo: {repo_prs} | "
+                    f"Total acumulado: {total_prs}"
                 )
-
-            print(
-                f"Repositorio processado: {repository['full_name']} | "
-                f"PRs validos acumulados: {len(dataset_rows)}"
-            )
-        except GitHubApiError as exc:
-            print(f"Falha ao processar {repository['full_name']}: {exc}")
-
-    if selected_repositories:
-        with repositories_output.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=selected_repositories[0].keys())
-            writer.writeheader()
-            writer.writerows(selected_repositories)
-
-    if dataset_rows:
-        with dataset_output.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=dataset_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(dataset_rows)
+            except GitHubApiError as exc:
+                print(f"Falha ao processar {repository['full_name']}: {exc}")
+    finally:
+        repo_handle.close()
+        pr_handle.close()
 
     print(f"Repositorios salvos em: {repositories_output}")
     print(f"Dataset salvo em: {dataset_output}")
-    print(f"Total de repositorios selecionados: {len(selected_repositories)}")
-    print(f"Total de PRs coletados: {len(dataset_rows)}")
+    print(f"Total de repositorios selecionados: {total_repos}")
+    print(f"Total de PRs coletados: {total_prs}")
 
 
 if __name__ == "__main__":
