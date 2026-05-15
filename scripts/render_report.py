@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from csv_utils import read_csv_with_optional_header
+
 
 RQ_MAP = {
     "RQ01": ("changed_lines_total", "tamanho do PR", "feedback final"),
@@ -17,6 +19,34 @@ RQ_MAP = {
     "RQ07": ("description_length", "descricao do PR", "numero de revisoes"),
     "RQ08": ("comments_total", "interacoes nos PRs", "numero de revisoes"),
 }
+
+DATASET_COLUMNS = [
+    "repository_full_name",
+    "repository_stars",
+    "repository_language",
+    "pull_number",
+    "pull_state",
+    "merged_flag",
+    "created_at",
+    "closed_or_merged_at",
+    "analysis_time_hours",
+    "analysis_time_days",
+    "files_changed",
+    "additions",
+    "deletions",
+    "changed_lines_total",
+    "description_length",
+    "participants_count",
+    "issue_comments_count",
+    "review_comments_count",
+    "comments_total",
+    "reviews_count",
+    "review_approvals",
+    "review_change_requests",
+    "review_comments_only",
+    "author_login",
+    "url",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,7 +88,7 @@ def safe_lookup(frame: pd.DataFrame, index: str, column: str) -> float:
 
 def main() -> None:
     args = parse_args()
-    dataset = pd.read_csv(args.dataset)
+    dataset = read_csv_with_optional_header(Path(args.dataset), DATASET_COLUMNS)
     analysis_dir = Path(args.analysis_dir)
     output_path = Path(args.output)
 

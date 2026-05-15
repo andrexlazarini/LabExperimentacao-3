@@ -1,0 +1,58 @@
+[
+  {
+    "target": "reviews_count",
+    "metric": "files_changed",
+    "spearman_correlation": 0.2254,
+    "p_value": 0.0,
+    "sample_size": 16646
+  },
+  {
+    "target": "reviews_count",
+    "metric": "additions",
+    "spearman_correlation": NaN,
+    "p_value": NaN,
+    "sample_size": 16646
+  },
+  {
+    "target": "reviews_count",
+    "metric": "deletions",
+    "spearman_correlation": NaN,
+    "p_value": NaN,
+    "sample_size": 16646
+  },
+  {
+    "target": "reviews_count",
+    "metric": "changed_lines_total",
+    "spearman_correlation": NaN,
+    "p_value": NaN,
+    "sample_size": 16646
+  },
+  {
+    "target": "reviews_count",
+    "metric": "analysis_time_hours",
+    "spearman_correlation": 0.1827,
+    "p_value": 0.0,
+    "sample_size": 16646
+  },
+  {
+    "target": "reviews_count",
+    "metric": "description_length",
+    "spearman_correlation": 0.1127,
+    "p_value": 0.0,
+    "sample_size": 16646
+  },
+  {
+    "target": "reviews_count",
+    "metric": "participants_count",
+    "spearman_correlation": 0.3697,
+    "p_value": 0.0,
+    "sample_size": 16646
+  },
+  {
+    "target": "reviews_count",
+    "metric": "comments_total",
+    "spearman_correlation": 0.5855,
+    "p_value": 0.0,
+    "sample_size": 16646
+  }
+]

@@ -4,10 +4,14 @@ import argparse
 import json
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from scipy.stats import spearmanr
+
+from csv_utils import read_csv_with_optional_header
 
 
 STATUS_METRICS = [
@@ -22,6 +26,34 @@ STATUS_METRICS = [
 ]
 
 REVIEW_METRICS = STATUS_METRICS
+
+DATASET_COLUMNS = [
+    "repository_full_name",
+    "repository_stars",
+    "repository_language",
+    "pull_number",
+    "pull_state",
+    "merged_flag",
+    "created_at",
+    "closed_or_merged_at",
+    "analysis_time_hours",
+    "analysis_time_days",
+    "files_changed",
+    "additions",
+    "deletions",
+    "changed_lines_total",
+    "description_length",
+    "participants_count",
+    "issue_comments_count",
+    "review_comments_count",
+    "comments_total",
+    "reviews_count",
+    "review_approvals",
+    "review_change_requests",
+    "review_comments_only",
+    "author_login",
+    "url",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,7 +107,11 @@ def compute_spearman(df: pd.DataFrame, target: str, metrics: list[str]) -> list[
     results: list[dict[str, float | str]] = []
     for metric in metrics:
         subset = df[[target, metric]].dropna()
-        coefficient, p_value = spearmanr(subset[target], subset[metric])
+        if subset.empty or subset[target].nunique() < 2 or subset[metric].nunique() < 2:
+            coefficient = float("nan")
+            p_value = float("nan")
+        else:
+            coefficient, p_value = spearmanr(subset[target], subset[metric])
         results.append(
             {
                 "target": target,
@@ -132,7 +168,7 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     ensure_dir(output_dir)
 
-    df = pd.read_csv(input_path)
+    df = read_csv_with_optional_header(input_path, DATASET_COLUMNS)
     df["pull_state_binary"] = df["merged_flag"].astype(int)
 
     status_summary = summarize_by_status(df)
